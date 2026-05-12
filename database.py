@@ -280,7 +280,15 @@ def get_engine(database_url=None):
     if database_url and database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
 
-    return create_engine(database_url, echo=False)
+    return create_engine(
+        database_url,
+        echo=False,
+        pool_size=5,
+        max_overflow=10,
+        pool_timeout=30,
+        pool_recycle=1800,  # Recycle connections every 30 min
+        pool_pre_ping=True,  # Test connection before using it
+    )
 
 
 def create_tables(engine=None):
