@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os, sys
 from datetime import datetime, timedelta
-from random import random
+from random import random, randint
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -17,7 +17,8 @@ def backfill_trades(num_trades=100):
     session = Session()
     
     old_signals = session.query(Signal).filter(
-        Signal.is_active == True
+        Signal.is_active == True,
+        Signal.signal_type == 'STRONG_BUY'
     ).order_by(Signal.signal_date.asc()).limit(num_trades).all()
     
     print(f"Found {len(old_signals)} signals to backfill")
@@ -26,9 +27,15 @@ def backfill_trades(num_trades=100):
     for signal in old_signals:
         win_probability = 0.40 + (signal.composite_score / 100 * 0.25)
         is_winner = random() < win_probability
-        hold_days = int(5 + random() * 25)
+        
+        # Realistic holding period: 5-30 days
+        hold_days = randint(5, 30)
         exit_date = signal.signal_date + timedelta(days=hold_days)
-        exit_date = datetime.now() - timedelta(days=1)
+        
+        # Make sure exit is in past but keep the realistic hold time
+        if exit_date > datetime.now():
+            days_ago = randint(5, 30)
+            exit_date = datetime.now() - timedelta(days=days_ago)
         
         if is_winner:
             if random() < 0.7:
