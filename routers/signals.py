@@ -42,6 +42,7 @@ def get_signals(current_user=Depends(get_current_user), db: Session = Depends(ge
             "take_profit_2": sig.take_profit_2,
             "primary_reason": sig.primary_reason,
             "contributing_factors": sig.contributing_factors,
+            "explanation": sig.explanation,
             "signal_date": sig.signal_date.isoformat() if sig.signal_date else None,
         })
 

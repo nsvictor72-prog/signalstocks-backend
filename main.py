@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from routers import auth, signals, options, performance, email_digest
+from routers import auth, signals, options, performance, email_digest, track_record
 
 app = FastAPI(title="SignalStocks API", version="1.0.0")
 
@@ -25,7 +25,8 @@ app.include_router(auth.router,         prefix="/api/auth",  tags=["auth"])
 app.include_router(signals.router,      prefix="/api",       tags=["signals"])
 app.include_router(options.router,      prefix="/api",       tags=["options"])
 app.include_router(performance.router,  prefix="/api",       tags=["performance"])
-app.include_router(email_digest.router, prefix="/api/email", tags=["email"])
+app.include_router(email_digest.router,  prefix="/api/email", tags=["email"])
+app.include_router(track_record.router, prefix="/api",       tags=["track-record"])
 
 
 @app.get("/")

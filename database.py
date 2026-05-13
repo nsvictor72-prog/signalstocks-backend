@@ -188,7 +188,8 @@ class Signal(Base):
     exit_price = Column(Float)
     exit_reason = Column(String(100))
     pnl_pct = Column(Float)
-    
+    explanation = Column(Text)
+
     stock = relationship("Stock", back_populates="signals")
 
 

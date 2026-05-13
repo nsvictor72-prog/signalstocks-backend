@@ -1,0 +1,32 @@
+"""
+Migration: add explanation column to signals table.
+Run once: python migrations/add_explanation_column.py
+"""
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from dotenv import load_dotenv
+load_dotenv()
+
+from database import get_engine
+
+def run():
+    engine = get_engine()
+    with engine.connect() as conn:
+        # Use IF NOT EXISTS-equivalent — safe to run multiple times
+        try:
+            conn.execute(
+                "ALTER TABLE signals ADD COLUMN explanation TEXT"
+            )
+            conn.commit()
+            print("[OK] Added 'explanation' column to signals table.")
+        except Exception as e:
+            msg = str(e).lower()
+            if "already exists" in msg or "duplicate column" in msg:
+                print("[SKIP] Column 'explanation' already exists — nothing to do.")
+            else:
+                raise
+
+if __name__ == "__main__":
+    run()
