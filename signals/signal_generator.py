@@ -331,13 +331,17 @@ class SignalGenerator:
             )
 
             # Apply all adjustments
-            composite_score = max(0, min(100, composite_score
+            composite_score = (
+                composite_score
                 + earnings_adj
                 + news_adj
                 + insider_adj
                 + squeeze_adj
                 + sr_adj
-            ))
+            )
+            
+            # Normalize to 0-95 range (cap at 95, not 100)
+            composite_score = max(0, min(95, composite_score))
 
             # Calculate confidence
             scores = [tech_score, fund_score, momentum_score]
