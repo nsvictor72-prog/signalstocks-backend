@@ -6,8 +6,8 @@ from routers.auth import get_current_user, get_db
 
 router = APIRouter()
 
-FREE_LIMIT = 10
-PREMIUM_LIMIT = 15
+FREE_LIMIT = 999
+PREMIUM_LIMIT = 999
 
 
 @router.get("/signals")
