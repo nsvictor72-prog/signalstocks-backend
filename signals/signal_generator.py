@@ -302,12 +302,12 @@ class SignalGenerator:
             momentum_score, momentum_reasons = self.calculate_momentum_score(ticker)
 
             # Phase 1: Volume spike + Earnings risk
-            from src.signals.phase1_factors import calculate_volume_score, calculate_earnings_risk
+            from signals.phase1_factors import calculate_volume_score, calculate_earnings_risk
             volume_adj, volume_reasons = calculate_volume_score(ticker, self.session)
             earnings_adj, earnings_reasons = calculate_earnings_risk(ticker)
 
             # Phase 2: News sentiment + Insider buying + Short squeeze
-            from src.signals.phase2_factors import (
+            from signals.phase2_factors import (
                 calculate_news_sentiment,
                 calculate_insider_score,
                 calculate_short_squeeze_score
@@ -317,7 +317,7 @@ class SignalGenerator:
             squeeze_adj,  squeeze_reasons  = calculate_short_squeeze_score(ticker)
 
             # Phase 3: Support & Resistance
-            from src.signals.support_resistance import calculate_sr_score
+            from signals.support_resistance import calculate_sr_score
             sr_adj, sr_reasons = calculate_sr_score(ticker, self.session)
 
             # Apply volume adjustment to technical score
