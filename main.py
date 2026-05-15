@@ -33,3 +33,4 @@ app.include_router(portfolio.router,   prefix="/api",       tags=["portfolio"])
 @app.get("/")
 def health():
     return {"status": "ok", "service": "signalstocks-api"}
+import run_migrations
