@@ -189,6 +189,8 @@ class Signal(Base):
     exit_reason = Column(String(100))
     pnl_pct = Column(Float)
     explanation = Column(Text)
+    implied_volatility = Column(Float)
+    cc_premium_estimate = Column(Float)
 
     stock = relationship("Stock", back_populates="signals")
 

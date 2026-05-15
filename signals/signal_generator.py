@@ -391,11 +391,29 @@ class SignalGenerator:
             else:
                 stop_loss = take_profit_1 = take_profit_2 = None
             
+            # ── Options pricing (IV + CC premium) ────────────────────────────
+            implied_volatility   = None
+            cc_premium_estimate  = None
+            if entry_price:
+                try:
+                    from signals.options_pricing import estimate_iv, calculate_cc_premium
+                    price_hist = self.session.query(PriceData).filter_by(
+                        stock_id=stock.id
+                    ).order_by(PriceData.date.desc()).limit(60).all()
+                    if len(price_hist) >= 10:
+                        closes = [p.close for p in reversed(price_hist) if p.close and p.close > 0]
+                        iv  = estimate_iv(closes)
+                        prem = calculate_cc_premium(entry_price, entry_price * 1.10, 30, iv)
+                        implied_volatility  = round(iv,   4)
+                        cc_premium_estimate = round(prem, 2)
+                except Exception as e:
+                    print(f"[WARN] Options pricing failed for {ticker}: {e}")
+
             # Combine all reasons
             # Put actionable warnings first (S/R, earnings, news), then technical reasons
             all_reasons = sr_reasons + earnings_reasons + news_reasons + insider_reasons + squeeze_reasons + tech_reasons + fund_reasons + momentum_reasons + volume_reasons
             primary_reason = all_reasons[0] if all_reasons else "Multi-factor analysis"
-            
+
             signal = {
                 'ticker': ticker,
                 'signal_type': signal_type,
@@ -411,6 +429,8 @@ class SignalGenerator:
                 'take_profit_2': take_profit_2,
                 'primary_reason': primary_reason,
                 'all_reasons': all_reasons[:8],  # Top 8 reasons
+                'implied_volatility':  implied_volatility,
+                'cc_premium_estimate': cc_premium_estimate,
                 'date': datetime.utcnow()
             }
             
@@ -466,6 +486,8 @@ class SignalGenerator:
                 take_profit_2=to_float(signal_data['take_profit_2']),
                 primary_reason=signal_data['primary_reason'],
                 contributing_factors=signal_data['all_reasons'],
+                implied_volatility=to_float(signal_data.get('implied_volatility')),
+                cc_premium_estimate=to_float(signal_data.get('cc_premium_estimate')),
                 is_active=True
             )
             
