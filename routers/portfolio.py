@@ -1,23 +1,59 @@
 """
 Portfolio / Paper Trading API
-- POST /api/portfolio/paper   — create a paper trade from a signal
-- GET  /api/portfolio         — list current user's positions
-- POST /api/portfolio/{id}/close — close a position
-- DELETE /api/portfolio/{id}  — delete a position
+- POST /api/portfolio/paper        — create a paper trade from a signal
+- GET  /api/portfolio              — list positions with live prices + unrealized P&L
+- POST /api/portfolio/{id}/close   — close a position
+- DELETE /api/portfolio/{id}       — delete a position
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
+import time
+
+import yfinance as yf
 
 from database import Portfolio, Stock
 from routers.auth import get_current_user, get_db
 
 router = APIRouter()
 
-PAPER_POSITION_SIZE = 10_000   # $10k default per paper trade
-STOP_LOSS_PCT       = 0.08     # -8%
-TAKE_PROFIT_PCT     = 0.12     # +12%
+PAPER_POSITION_SIZE = 10_000
+STOP_LOSS_PCT       = 0.08
+TAKE_PROFIT_PCT     = 0.12
+
+# ── Price cache (5-min TTL avoids hammering yfinance on every page refresh) ───
+_price_cache: dict[str, tuple[float, float]] = {}  # ticker → (price, fetched_at)
+_CACHE_TTL = 300  # seconds
+
+
+def _fetch_current_prices(tickers: list[str]) -> dict[str, float | None]:
+    """Batch-fetch latest prices via yfinance with a 5-minute in-process cache."""
+    if not tickers:
+        return {}
+    now     = time.time()
+    result  = {}
+    to_fetch = []
+
+    for ticker in tickers:
+        cached_price, cached_at = _price_cache.get(ticker, (None, 0))
+        if cached_price and now - cached_at < _CACHE_TTL:
+            result[ticker] = cached_price
+        else:
+            to_fetch.append(ticker)
+
+    for ticker in to_fetch:
+        try:
+            info  = yf.Ticker(ticker).fast_info
+            price = getattr(info, "last_price", None) or getattr(info, "previous_close", None)
+            p = float(price) if price else None
+            result[ticker] = p
+            if p:
+                _price_cache[ticker] = (p, now)
+        except Exception:
+            result[ticker] = None
+
+    return result
 
 
 # ── Request bodies ────────────────────────────────────────────────────────────
@@ -35,28 +71,38 @@ class CloseRequest(BaseModel):
     exit_price: float
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Serializer ────────────────────────────────────────────────────────────────
 
-def _serialize(pos: Portfolio, ticker: str, company: str) -> dict:
+def _serialize(pos: Portfolio, ticker: str, company: str, current_price: float | None = None) -> dict:
     cost = pos.shares * pos.entry_price
+
+    unrealized_pnl     = None
+    unrealized_pnl_pct = None
+    if current_price and pos.is_open:
+        unrealized_pnl     = round(pos.shares * (current_price - pos.entry_price), 2)
+        unrealized_pnl_pct = round((current_price - pos.entry_price) / pos.entry_price * 100, 2)
+
     return {
-        "id":              pos.id,
-        "ticker":          ticker,
-        "company":         company or ticker,
-        "is_paper_trade":  pos.is_paper_trade,
-        "is_open":         pos.is_open,
-        "shares":          pos.shares,
-        "entry_price":     pos.entry_price,
-        "entry_date":      pos.entry_date.isoformat() if pos.entry_date else None,
-        "stop_loss_price": pos.stop_loss_price,
-        "take_profit_price": pos.take_profit_price,
-        "exit_price":      pos.exit_price,
-        "exit_date":       pos.exit_date.isoformat() if pos.exit_date else None,
-        "position_value":  cost,
-        "realized_pnl":    pos.realized_pnl,
-        "realized_pnl_pct":pos.realized_pnl_pct,
-        "notes":           pos.notes,
-        "signal_type":     pos.notes.split("|")[0].strip() if pos.notes else None,
+        "id":                 pos.id,
+        "ticker":             ticker,
+        "company":            company or ticker,
+        "is_paper_trade":     pos.is_paper_trade,
+        "is_open":            pos.is_open,
+        "shares":             pos.shares,
+        "entry_price":        pos.entry_price,
+        "current_price":      current_price,
+        "entry_date":         pos.entry_date.isoformat() if pos.entry_date else None,
+        "stop_loss_price":    pos.stop_loss_price,
+        "take_profit_price":  pos.take_profit_price,
+        "exit_price":         pos.exit_price,
+        "exit_date":          pos.exit_date.isoformat() if pos.exit_date else None,
+        "position_value":     cost,
+        "unrealized_pnl":     unrealized_pnl,
+        "unrealized_pnl_pct": unrealized_pnl_pct,
+        "realized_pnl":       pos.realized_pnl,
+        "realized_pnl_pct":   pos.realized_pnl_pct,
+        "notes":              pos.notes,
+        "signal_type":        pos.notes.split("|")[0].strip() if pos.notes else None,
     }
 
 
@@ -77,24 +123,24 @@ def create_paper_trade(
     target = body.take_profit or round(body.entry_price * (1 + TAKE_PROFIT_PCT), 2)
 
     pos = Portfolio(
-        stock_id         = stock.id,
-        user_id          = current_user.id,
-        entry_date       = datetime.utcnow(),
-        entry_price      = body.entry_price,
-        shares           = shares,
-        position_value   = shares * body.entry_price,
-        is_open          = True,
-        is_paper_trade   = True,
-        stop_loss_price  = stop,
-        take_profit_price= target,
-        notes            = f"{body.signal_type} | {body.notes or 'Paper trade from Orders page'}",
+        stock_id          = stock.id,
+        user_id           = current_user.id,
+        entry_date        = datetime.utcnow(),
+        entry_price       = body.entry_price,
+        shares            = shares,
+        position_value    = shares * body.entry_price,
+        is_open           = True,
+        is_paper_trade    = True,
+        stop_loss_price   = stop,
+        take_profit_price = target,
+        notes             = f"{body.signal_type} | {body.notes or 'Paper trade from Orders page'}",
     )
     db.add(pos)
     db.commit()
     db.refresh(pos)
 
     return {
-        "message": f"Paper trade created: {shares} shares of {body.ticker.upper()} @ ${body.entry_price:.2f}",
+        "message":  f"Paper trade created: {shares} shares of {body.ticker.upper()} @ ${body.entry_price:.2f}",
         "position": _serialize(pos, stock.ticker, stock.company_name or stock.ticker),
     }
 
@@ -112,19 +158,23 @@ def get_portfolio(
         .all()
     )
 
-    open_positions   = [_serialize(p, t, c) for p, t, c in rows if p.is_open]
-    closed_positions = [_serialize(p, t, c) for p, t, c in rows if not p.is_open]
+    # Fetch live prices for all open positions in one batch
+    open_tickers = list({t for p, t, _ in rows if p.is_open})
+    prices = _fetch_current_prices(open_tickers)
 
-    paper_realized = sum(
-        (p.realized_pnl or 0) for p, _, _ in rows
-        if p.is_paper_trade and not p.is_open
-    )
+    open_positions   = [_serialize(p, t, c, prices.get(t)) for p, t, c in rows if p.is_open]
+    closed_positions = [_serialize(p, t, c)                for p, t, c in rows if not p.is_open]
+
+    paper_realized    = sum((p.realized_pnl or 0)    for p, _, _ in rows if p.is_paper_trade and not p.is_open)
+    paper_unrealized  = sum((pos.get("unrealized_pnl") or 0) for pos in open_positions if pos.get("is_paper_trade"))
 
     return {
-        "open":           open_positions,
-        "closed":         closed_positions,
-        "paper_realized_pnl": round(paper_realized, 2),
-        "total_positions": len(rows),
+        "open":                  open_positions,
+        "closed":                closed_positions,
+        "paper_realized_pnl":    round(paper_realized, 2),
+        "paper_unrealized_pnl":  round(paper_unrealized, 2),
+        "total_positions":       len(rows),
+        "prices_as_of":          datetime.utcnow().isoformat(),
     }
 
 
@@ -147,16 +197,16 @@ def close_position(
     pnl_dollar = pos.shares * (body.exit_price - pos.entry_price)
     pnl_pct    = (body.exit_price - pos.entry_price) / pos.entry_price * 100
 
-    pos.is_open         = False
-    pos.exit_price      = body.exit_price
-    pos.exit_date       = datetime.utcnow()
-    pos.realized_pnl    = round(pnl_dollar, 2)
-    pos.realized_pnl_pct= round(pnl_pct, 2)
+    pos.is_open          = False
+    pos.exit_price       = body.exit_price
+    pos.exit_date        = datetime.utcnow()
+    pos.realized_pnl     = round(pnl_dollar, 2)
+    pos.realized_pnl_pct = round(pnl_pct, 2)
     db.commit()
 
     stock = db.query(Stock).filter(Stock.id == pos.stock_id).first()
     return {
-        "message": f"Position closed: {stock.ticker if stock else '?'} @ ${body.exit_price:.2f} ({pnl_pct:+.2f}%)",
+        "message":    f"Position closed: {stock.ticker if stock else '?'} @ ${body.exit_price:.2f} ({pnl_pct:+.2f}%)",
         "pnl_dollar": round(pnl_dollar, 2),
         "pnl_pct":    round(pnl_pct, 2),
     }
