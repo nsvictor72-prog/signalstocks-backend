@@ -110,6 +110,41 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     return TokenResponse(access_token=token, tier=user.tier)
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 @router.get("/me")
 def me(current_user=Depends(get_current_user)):
-    return {"id": current_user.id, "email": current_user.email, "tier": current_user.tier}
+    return {
+        "id":         current_user.id,
+        "email":      current_user.email,
+        "tier":       current_user.tier,
+        "is_active":  current_user.is_active,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+    }
+
+
+@router.post("/change-password")
+def change_password(
+    body: ChangePasswordRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not _verify_password(body.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    current_user.hashed_password = _hash_password(body.new_password)
+    db.commit()
+    return {"message": "Password changed successfully"}
+
+
+@router.delete("/me", status_code=204)
+def delete_account(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.is_active = False
+    db.commit()
