@@ -236,6 +236,8 @@ class Portfolio(Base):
     take_profit_price = Column(Float)
     signal_id = Column(Integer, ForeignKey('signals.id'))
     notes = Column(Text)
+    is_paper_trade = Column(Boolean, default=False)
+    user_id = Column(Integer, ForeignKey('app_users.id'))
 
 
 class User(Base):
