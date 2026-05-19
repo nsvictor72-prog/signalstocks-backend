@@ -251,6 +251,11 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     tier = Column(String(20), default='free')  # 'free' | 'premium'
     is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=False)
+    verification_token = Column(String(255), nullable=True)
+    verification_token_expires = Column(DateTime, nullable=True)
+    reset_token = Column(String(255), nullable=True)
+    reset_token_expires = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

@@ -55,6 +55,7 @@ python-http-client==3.3.7
 python-jose==3.5.0
 pytz==2026.2
 realtime==2.30.0
+resend>=2.0.0
 requests==2.34.0
 rich==14.3.4
 rsa==4.9.1
