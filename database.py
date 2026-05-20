@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Database Models for Quantitative Stock Screener
 Defines schema for storing stock data, signals, and performance metrics
@@ -315,6 +316,15 @@ def get_session(engine=None):
         engine = get_engine()
     Session = sessionmaker(bind=engine)
     return Session()
+
+
+def get_db():
+    """FastAPI dependency that yields a DB session and closes it after the request."""
+    session = get_session()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 def init_database():

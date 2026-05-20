@@ -1,25 +1,18 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from database import Signal, Stock
-from routers.auth import get_current_user, get_db
+from database import Signal, Stock, get_db
 
 router = APIRouter()
 
-FREE_LIMIT = 999
-PREMIUM_LIMIT = 999
-
 
 @router.get("/signals")
-def get_signals(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    limit = PREMIUM_LIMIT if current_user.tier == "premium" else FREE_LIMIT
-
+def get_signals(db: Session = Depends(get_db)):
     rows = (
         db.query(Signal, Stock.ticker, Stock.company_name, Stock.sector)
         .join(Stock, Signal.stock_id == Stock.id)
         .filter(Signal.is_active == True)
         .order_by(Signal.composite_score.desc())
-        .limit(limit)
         .all()
     )
 
@@ -48,4 +41,4 @@ def get_signals(current_user=Depends(get_current_user), db: Session = Depends(ge
             "signal_date": sig.signal_date.isoformat() if sig.signal_date else None,
         })
 
-    return {"signals": signals, "count": len(signals), "tier": current_user.tier}
+    return {"signals": signals, "count": len(signals)}

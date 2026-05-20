@@ -3,7 +3,6 @@ from datetime import date
 import os
 import yfinance as yf
 
-from routers.auth import get_current_user
 
 router = APIRouter()
 
@@ -32,7 +31,7 @@ def _unusual_contracts(df, current_price: float, option_type: str) -> list:
 
 
 @router.get("/options")
-def get_options(current_user=Depends(get_current_user)):
+def get_options():
     results = []
     for ticker in OPTIONS_TICKERS:
         try:

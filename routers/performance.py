@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from database import Signal, Stock
-from routers.auth import get_current_user, get_db
+from database import get_db
 
 router = APIRouter()
 
 
 @router.get("/performance")
-def get_performance(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+def get_performance(db: Session = Depends(get_db)):
     closed = (
         db.query(Signal)
         .filter(Signal.is_active == False, Signal.pnl_pct != None)

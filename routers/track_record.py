@@ -9,7 +9,7 @@ from datetime import datetime
 import time
 
 from database import Signal, Stock
-from routers.auth import get_db
+from database import get_db
 
 router = APIRouter()
 
